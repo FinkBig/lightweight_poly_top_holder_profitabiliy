@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Polymarket Analyzer</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Polymarket Analyzer</h1>
+      <p class="subtitle">Paste a Polymarket URL to analyze top-holder PNL imbalance</p>
+    </header>
+
+    <form id="analyze-form">
+      <div class="search-row">
+        <input
+          type="text"
+          id="url-input"
+          placeholder="https://polymarket.com/event/..."
+          autocomplete="off"
+          spellcheck="false"
+        >
+        <button type="submit" id="analyze-btn">Analyze</button>
+      </div>
+    </form>
+
+    <div id="progress-section" class="hidden">
+      <div class="progress-bar-track">
+        <div class="progress-bar-fill" id="progress-fill"></div>
+      </div>
+      <p id="progress-msg" class="progress-msg"></p>
+    </div>
+
+    <div id="error-section" class="hidden">
+      <div class="error-box" id="error-box"></div>
+    </div>
+
+    <div id="results-section" class="hidden">
+      <div id="market-cards"></div>
+    </div>
+
+    <div id="summary-section" class="hidden">
+      <div class="summary-box" id="summary-box"></div>
+    </div>
+  </div>
+
+  <script>
+    // Pass prefill URL from Jinja2 to JS
+    window.__PREFILL_URL__ = "{{ prefill_url }}";
+  </script>
+  <script src="/static/app.js"></script>
+</body>
+</html>
