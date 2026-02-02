@@ -18,24 +18,10 @@ Results stream incrementally via SSE so you see each market card the moment it's
 
 ## Run locally
 
-Requires the [top_holders](https://github.com/FinkBig/top_holders) scanner repo as a sibling directory (for shared models/fetchers):
-
-```
-Code/
-  top_holders/       # scanner repo
-  polymarket-analyzer/  # this repo
-```
-
 ```bash
-# Clone both repos
-git clone https://github.com/FinkBig/top_holders.git
 git clone https://github.com/FinkBig/lightweight_poly_top_holder_profitabiliy.git polymarket-analyzer
-
-# Install dependencies
 cd polymarket-analyzer
 pip install -r requirements.txt
-
-# Run
 uvicorn web.app:app --reload --port 8000
 ```
 
@@ -46,8 +32,8 @@ Visit **http://localhost:8000** and paste any Polymarket URL.
 Analysis results are shareable. Just copy the browser URL after running an analysis:
 
 ```
-http://localhost:8000/analyze/super-bowl-lix
-http://localhost:8000/analyze/kraken-ipo-in-2025/will-kraken-ipo-2025
+https://polymarket-analyzer.onrender.com/analyze/super-bowl-lix
+https://polymarket-analyzer.onrender.com/analyze/kraken-ipo-in-2025/will-kraken-ipo-2025
 ```
 
 Opening a shareable link auto-starts the analysis.
