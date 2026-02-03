@@ -7,6 +7,25 @@
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
+  <!-- Watchlist Sidebar -->
+  <aside id="watchlist-sidebar" class="watchlist-sidebar">
+    <div class="watchlist-header">
+      <h2>Watchlist</h2>
+      <button id="watchlist-close" class="watchlist-close">&times;</button>
+    </div>
+    <div id="watchlist-items" class="watchlist-items">
+      <p class="watchlist-empty">No markets saved yet. Click the bookmark icon on any market to add it.</p>
+    </div>
+  </aside>
+
+  <!-- Watchlist Toggle Button -->
+  <button id="watchlist-toggle" class="watchlist-toggle" title="Open Watchlist">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
+    </svg>
+    <span id="watchlist-count" class="watchlist-count hidden">0</span>
+  </button>
+
   <div class="container">
     <header>
       <h1>Polymarket Analyzer</h1>
