@@ -144,11 +144,20 @@ class GammaClient:
         If market_slug is provided, tries to fetch that specific market first.
         Falls back to fetching the full event and parsing all sub-markets.
         """
+        # Try market_slug first if provided
         if market_slug:
             market = await self.fetch_market_by_slug(market_slug)
             if market:
                 return [market]
 
+        # If event_slug == market_slug, we already tried the market lookup above
+        # Try event_slug as a direct market lookup (for sports URLs etc.)
+        if event_slug and event_slug != market_slug:
+            market = await self.fetch_market_by_slug(event_slug)
+            if market:
+                return [market]
+
+        # Fall back to event lookup (for multi-market events)
         event = await self.fetch_event_by_slug(event_slug)
         if not event:
             return []
