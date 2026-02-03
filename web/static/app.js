@@ -440,10 +440,10 @@
       '<div class="side-panel side-' + side + '">' +
         '<h3>' + sideLabel + ' Side</h3>' +
         '<div class="stat-row"><span class="stat-label">Holders analyzed</span><span class="stat-value">' + analysis.top_n_count + '</span></div>' +
-        '<div class="stat-row"><span class="stat-label">Profitable</span><span class="stat-value">' + analysis.profitable_count + ' / ' + known + ' (' + fmtPct(analysis.profitable_pct) + ')</span></div>' +
+        '<div class="stat-row"><span class="stat-label">Profitable (account)</span><span class="stat-value">' + analysis.profitable_count + ' / ' + known + ' (' + fmtPct(analysis.profitable_pct) + ')</span></div>' +
         '<div class="stat-row"><span class="stat-label">Unknown</span><span class="stat-value">' + analysis.unknown_count + '</span></div>' +
-        '<div class="stat-row"><span class="stat-label">Avg PNL (cash)</span><span class="stat-value ' + pnlClass(analysis.avg_overall_pnl) + '">' + fmtUSD(analysis.avg_overall_pnl) + '</span></div>' +
-        '<div class="stat-row"><span class="stat-label">Avg PNL (realized)</span><span class="stat-value ' + pnlClass(analysis.avg_realized_pnl) + '">' + fmtUSD(analysis.avg_realized_pnl) + '</span></div>' +
+        '<div class="stat-row"><span class="stat-label">Avg Market PNL</span><span class="stat-value ' + pnlClass(analysis.avg_overall_pnl) + '">' + fmtUSD(analysis.avg_overall_pnl) + '</span></div>' +
+        '<div class="stat-row"><span class="stat-label">Avg Account PNL</span><span class="stat-value ' + pnlClass(analysis.avg_realized_pnl) + '">' + fmtUSD(analysis.avg_realized_pnl) + '</span></div>' +
         '<div class="stat-row"><span class="stat-label">Position size</span><span class="stat-value">' + fmt(analysis.total_position_size, 0) + ' shares</span></div>' +
       '</div>'
     );
@@ -461,18 +461,22 @@
         '</h4>' +
         '<div id="' + id + '" class="collapsible hidden">' +
           '<table class="holder-table">' +
-            '<thead><tr><th>Wallet</th><th>Amount</th><th>PNL</th><th>Status</th></tr></thead>' +
+            '<thead><tr><th>Wallet</th><th>Amount</th><th>Market PNL</th><th>Account PNL</th><th>Status</th></tr></thead>' +
             '<tbody>';
 
     for (var i = 0; i < holders.length; i++) {
       var h = holders[i];
-      var cls = pnlClass(h.overall_pnl);
-      var status = h.is_on_leaderboard ? (h.overall_pnl > 0 ? "Profitable" : "Losing") : "Unknown";
+      // Market PNL = unrealized P&L on this specific position
+      var marketPnlClass = pnlClass(h.overall_pnl);
+      // Account PNL = lifetime realized P&L (determines profitable/losing status)
+      var accountPnlClass = pnlClass(h.realized_pnl);
+      var status = h.realized_pnl != null ? (h.realized_pnl > 0 ? "Profitable" : "Losing") : "Unknown";
       html +=
-        '<tr class="' + cls + '">' +
+        '<tr class="' + accountPnlClass + '">' +
           '<td class="wallet">' + (h.username || shortAddr(h.wallet_address)) + '</td>' +
           '<td>' + fmt(h.amount, 0) + '</td>' +
-          '<td class="' + cls + '">' + fmtUSD(h.overall_pnl) + '</td>' +
+          '<td class="' + marketPnlClass + '">' + fmtUSD(h.overall_pnl) + '</td>' +
+          '<td class="' + accountPnlClass + '">' + fmtUSD(h.realized_pnl) + '</td>' +
           '<td>' + status + '</td>' +
         '</tr>';
     }

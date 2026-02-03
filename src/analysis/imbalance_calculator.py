@@ -105,14 +105,16 @@ class ImbalanceCalculator:
             if cumulative >= total_balance * TOP_HOLDER_PERCENT:
                 break
 
-        # Count by PNL status (analyzing all holders we have)
+        # Count by PNL status - use REALIZED (account) PNL for profitability
+        # This represents whether the trader has been profitable overall,
+        # not just on this specific market
         profitable = [
-            h for h in holders if h.overall_pnl is not None and h.overall_pnl > 0
+            h for h in holders if h.realized_pnl is not None and h.realized_pnl > 0
         ]
         losing = [
-            h for h in holders if h.overall_pnl is not None and h.overall_pnl <= 0
+            h for h in holders if h.realized_pnl is not None and h.realized_pnl <= 0
         ]
-        unknown = [h for h in holders if h.overall_pnl is None]
+        unknown = [h for h in holders if h.realized_pnl is None]
 
         # Calculate percentages (of known wallets only)
         known_count = len(profitable) + len(losing)
@@ -180,9 +182,10 @@ class ImbalanceCalculator:
         yes_pct = yes_analysis.profitable_pct
         no_pct = no_analysis.profitable_pct
 
-        # Calculate scores using 0 for None
-        yes_avg_pnl = yes_analysis.avg_overall_pnl or 0
-        no_avg_pnl = no_analysis.avg_overall_pnl or 0
+        # Use REALIZED (account) PNL for flagging decisions
+        # This represents overall trader profitability, not market-specific
+        yes_avg_pnl = yes_analysis.avg_realized_pnl or 0
+        no_avg_pnl = no_analysis.avg_realized_pnl or 0
 
         is_flagged = False
         flagged_side = None
