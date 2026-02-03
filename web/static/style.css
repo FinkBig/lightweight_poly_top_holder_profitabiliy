@@ -446,28 +446,30 @@ h1 {
 /* ── Bookmark Button ── */
 
 .bookmark-btn {
-  background: transparent;
-  border: 1px solid #2a2d38;
+  background: #1a1c24;
+  border: 1px solid #3a3d48;
   border-radius: 4px;
-  padding: 4px 6px;
+  padding: 5px 8px;
   cursor: pointer;
-  color: #666;
+  color: #888;
   transition: all 0.2s;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   margin-left: auto;
+  flex-shrink: 0;
 }
 
 .bookmark-btn:hover {
   border-color: #4a90d9;
   color: #4a90d9;
+  background: rgba(74, 144, 217, 0.1);
 }
 
 .bookmark-btn.active {
   border-color: #FFC107;
   color: #FFC107;
-  background: rgba(255, 193, 7, 0.1);
+  background: rgba(255, 193, 7, 0.15);
 }
 
 /* ── Watchlist Toggle Button ── */
