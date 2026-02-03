@@ -1,11 +1,11 @@
-"""Fetcher for trader PNL data from Polymarket Data API.
+"""Fetcher for trader PNL data from Polymarket.
 
-Uses the /positions endpoint to calculate each wallet's total PNL.
+Uses the PNL subgraph to calculate each wallet's total realized PNL.
+This is more accurate than the positions API which only shows unrealized P&L
+on current open positions.
 
-We use cashPnl (total PNL including unrealized) as the primary metric because:
-- realizedPnl only reflects closed trades, and ~80% of active holders have realizedPnl=0
-- cashPnl captures current profitability of open positions
-- This gives us data on 95%+ of holders vs only 20% with realizedPnl
+The subgraph tracks all historical trades and calculates realized profit/loss
+from closed positions, which matches what Polymarket shows on user profiles.
 
 NOTE: Time-windowed PNL (e.g., 30-day) is NOT available from this endpoint.
 The pnl_30d field in MarketHolder will remain None.
@@ -24,6 +24,9 @@ from ..config.settings import (
 )
 
 logger = logging.getLogger(__name__)
+
+# PNL Subgraph endpoint - provides accurate realized PNL from all historical trades
+PNL_SUBGRAPH_URL = "https://api.goldsky.com/api/public/project_cl6mb8i9h0003e201j6li0diw/subgraphs/pnl-subgraph/0.0.14/gn"
 
 
 class LeaderboardFetcher:
@@ -44,11 +47,61 @@ class LeaderboardFetcher:
         if self.session:
             await self.session.close()
 
+    async def fetch_wallet_pnl_from_subgraph(
+        self,
+        wallet_address: str,
+    ) -> Optional[Dict[str, float]]:
+        """
+        Fetch total realized PNL for a wallet from the PNL subgraph.
+
+        The subgraph tracks all historical trades and provides accurate
+        realized profit/loss that matches Polymarket profile pages.
+        """
+        wallet_lower = wallet_address.lower()
+
+        query = """
+        query($user: String!) {
+            userPositions(where: {user: $user}, first: 1000) {
+                realizedPnl
+            }
+        }
+        """
+
+        try:
+            async with self.session.post(
+                PNL_SUBGRAPH_URL,
+                json={"query": query, "variables": {"user": wallet_lower}},
+                headers={"Content-Type": "application/json"},
+            ) as response:
+                self._api_calls += 1
+                if response.status == 200:
+                    data = await response.json()
+                    positions = data.get("data", {}).get("userPositions", [])
+                    if not positions:
+                        return None
+
+                    # realizedPnl is in USDC micro-units (1e6)
+                    total_realized = sum(
+                        float(p.get("realizedPnl", 0) or 0) / 1e6
+                        for p in positions
+                    )
+
+                    return {
+                        "total_pnl": total_realized,
+                        "realized_pnl": total_realized,
+                        "position_count": len(positions),
+                    }
+                else:
+                    return None
+        except Exception as e:
+            logger.debug(f"Error fetching PNL from subgraph for {wallet_address[:10]}: {e}")
+            return None
+
     async def fetch_wallet_positions(
         self,
         wallet_address: str,
     ) -> List[Dict[str, Any]]:
-        """Fetch all positions for a wallet."""
+        """Fetch all positions for a wallet from the data API (fallback)."""
         params = {"user": wallet_address}
 
         try:
@@ -69,17 +122,15 @@ class LeaderboardFetcher:
         wallet_address: str,
     ) -> Optional[Dict[str, float]]:
         """
-        Calculate total PNL for a wallet by summing all position PNLs.
+        Calculate total PNL for a wallet.
+
+        Uses the PNL subgraph for accurate realized PNL from all historical trades.
+        This matches what Polymarket shows on user profile pages.
 
         Returns dict with:
-        - 'total_pnl': Cash PNL (total including unrealized) - PRIMARY METRIC
-        - 'cash_pnl': Same as total_pnl
-        - 'realized_pnl': Only closed trade PNL (often 0 for active traders)
-
-        We use cash_pnl as the primary metric because:
-        - ~80% of active holders have realizedPnl=0 (haven't closed positions)
-        - cash_pnl captures current profitability on open positions
-        - This gives us usable data on 95%+ of holders
+        - 'total_pnl': Total realized PNL from all closed trades
+        - 'realized_pnl': Same as total_pnl
+        - 'position_count': Number of positions tracked
         """
         wallet_lower = wallet_address.lower()
 
@@ -87,6 +138,14 @@ class LeaderboardFetcher:
         if wallet_lower in self._pnl_cache:
             return self._pnl_cache[wallet_lower]
 
+        # Try subgraph first (most accurate)
+        result = await self.fetch_wallet_pnl_from_subgraph(wallet_address)
+
+        if result:
+            self._pnl_cache[wallet_lower] = result
+            return result
+
+        # Fallback to positions API if subgraph fails
         positions = await self.fetch_wallet_positions(wallet_address)
 
         if not positions:
@@ -102,8 +161,7 @@ class LeaderboardFetcher:
             total_realized_pnl += realized_pnl
 
         result = {
-            # Use cash PNL as primary metric (includes unrealized gains/losses)
-            "total_pnl": total_cash_pnl,
+            "total_pnl": total_realized_pnl if total_realized_pnl != 0 else total_cash_pnl,
             "cash_pnl": total_cash_pnl,
             "realized_pnl": total_realized_pnl,
             "position_count": len(positions),
