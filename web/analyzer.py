@@ -76,8 +76,11 @@ async def analyze_markets_stream(
                 })
 
                 # Step 2: Enrich with PNL (slow - ~5-10s)
+                # Pass condition_id to get market-specific unrealized PNL
                 all_holders = yes_holders + no_holders
-                await pnl_fetcher.enrich_holders_with_pnl(all_holders)
+                await pnl_fetcher.enrich_holders_with_pnl(
+                    all_holders, condition_id=market.condition_id
+                )
 
                 # Step 3: Calculate imbalance
                 scan_result = calculator.create_scan_result(

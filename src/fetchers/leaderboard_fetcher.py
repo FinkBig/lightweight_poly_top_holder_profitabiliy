@@ -209,13 +209,20 @@ class LeaderboardFetcher:
     async def enrich_holders_with_pnl(
         self,
         holders: List[MarketHolder],
+        condition_id: str = None,
         batch_size: int = 5,
     ) -> int:
         """
         Enrich holder objects with PNL data from positions API.
 
-        Fetches positions for each holder and calculates total PNL.
-        Uses batching to respect rate limits.
+        Args:
+            holders: List of MarketHolder objects to enrich
+            condition_id: The market's condition ID to get market-specific PNL
+            batch_size: Number of wallets to fetch in parallel
+
+        Sets on each holder:
+            - overall_pnl: Unrealized PNL for THIS specific market position (cashPnl)
+            - realized_pnl: Total realized PNL across ALL positions (account total)
 
         Returns count of holders with PNL data found.
         """
@@ -225,19 +232,46 @@ class LeaderboardFetcher:
         for i in range(0, total, batch_size):
             batch = holders[i : i + batch_size]
 
-            # Fetch PNL for batch in parallel
-            tasks = [self.calculate_wallet_pnl(h.wallet_address) for h in batch]
+            # Fetch positions for batch in parallel
+            tasks = [self.fetch_wallet_positions(h.wallet_address) for h in batch]
             results = await asyncio.gather(*tasks, return_exceptions=True)
 
-            for holder, result in zip(batch, results):
-                if isinstance(result, Exception):
+            for holder, positions in zip(batch, results):
+                if isinstance(positions, Exception) or not positions:
                     continue
 
-                if result and result.get("total_pnl") is not None:
-                    holder.overall_pnl = result["total_pnl"]
-                    holder.realized_pnl = result.get("realized_pnl")
-                    holder.is_on_leaderboard = True
-                    found_count += 1
+                # Find market-specific position for unrealized PNL
+                market_cash_pnl = None
+                if condition_id:
+                    for pos in positions:
+                        if pos.get("conditionId", "").lower() == condition_id.lower():
+                            market_cash_pnl = float(pos.get("cashPnl", 0) or 0)
+                            break
+
+                # Sum all positions' realized PNL for account total
+                total_realized = sum(
+                    float(pos.get("realizedPnl", 0) or 0) for pos in positions
+                )
+
+                # Also sum cashPnl across all positions as fallback
+                total_cash = sum(
+                    float(pos.get("cashPnl", 0) or 0) for pos in positions
+                )
+
+                # Set overall_pnl to market-specific cashPnl if available,
+                # otherwise use total cashPnl
+                holder.overall_pnl = market_cash_pnl if market_cash_pnl is not None else total_cash
+                holder.realized_pnl = total_realized
+                holder.is_on_leaderboard = True
+                found_count += 1
+
+                # Cache for future lookups
+                wallet_lower = holder.wallet_address.lower()
+                self._pnl_cache[wallet_lower] = {
+                    "total_pnl": holder.overall_pnl,
+                    "realized_pnl": total_realized,
+                    "position_count": len(positions),
+                }
 
             # Rate limiting between batches
             if i + batch_size < total:

@@ -449,15 +449,18 @@ h1 {
   background: #1a1c24;
   border: 1px solid #3a3d48;
   border-radius: 4px;
-  padding: 5px 8px;
+  padding: 4px 10px;
   cursor: pointer;
   color: #888;
   transition: all 0.2s;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 5px;
   margin-left: auto;
   flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 600;
 }
 
 .bookmark-btn:hover {
@@ -470,6 +473,11 @@ h1 {
   border-color: #FFC107;
   color: #FFC107;
   background: rgba(255, 193, 7, 0.15);
+}
+
+.bookmark-text {
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 /* ── Watchlist Toggle Button ── */

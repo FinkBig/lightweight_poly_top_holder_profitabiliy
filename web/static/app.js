@@ -363,6 +363,7 @@
     }
 
     // Build header with bookmark button in meta row
+    var bookmarkText = inWatchlist ? 'Saved' : 'Save';
     var headerHTML =
       '<div class="card-header">' +
         '<h2 class="card-question">' + escapeHtml(sr.question) + '</h2>' +
@@ -370,9 +371,10 @@
           '<span class="verdict ' + verdictClass + '">' + verdictText + '</span>' +
           '<a class="pm-link" href="https://polymarket.com/event/' + encodeURIComponent(market.slug) + '" target="_blank" rel="noopener">View on Polymarket</a>' +
           '<button class="' + bookmarkClass + '" title="' + bookmarkTitle + '" data-condition-id="' + market.condition_id + '">' +
-            '<svg width="16" height="16" viewBox="0 0 24 24" fill="' + (inWatchlist ? 'currentColor' : 'none') + '" stroke="currentColor" stroke-width="2">' +
+            '<svg width="14" height="14" viewBox="0 0 24 24" fill="' + (inWatchlist ? 'currentColor' : 'none') + '" stroke="currentColor" stroke-width="2">' +
               '<path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>' +
             '</svg>' +
+            '<span class="bookmark-text">' + bookmarkText + '</span>' +
           '</button>' +
         '</div>' +
       '</div>';
@@ -510,17 +512,20 @@
     if (bookmarkBtn) {
       var conditionId = bookmarkBtn.getAttribute("data-condition-id");
       var card = bookmarkBtn.closest(".market-card");
+      var textSpan = bookmarkBtn.querySelector(".bookmark-text");
 
       if (isInWatchlist(conditionId)) {
         removeFromWatchlist(conditionId);
         bookmarkBtn.classList.remove("active");
         bookmarkBtn.title = "Add to watchlist";
         bookmarkBtn.querySelector("svg").setAttribute("fill", "none");
+        if (textSpan) textSpan.textContent = "Save";
       } else if (card && card._marketData) {
         addToWatchlist(card._marketData);
         bookmarkBtn.classList.add("active");
         bookmarkBtn.title = "Remove from watchlist";
         bookmarkBtn.querySelector("svg").setAttribute("fill", "currentColor");
+        if (textSpan) textSpan.textContent = "Saved";
       }
       return;
     }
