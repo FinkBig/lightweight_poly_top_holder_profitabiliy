@@ -1,11 +1,10 @@
 """Fetcher for trader PNL data from Polymarket.
 
-Uses the PNL subgraph to calculate each wallet's total realized PNL.
-This is more accurate than the positions API which only shows unrealized P&L
-on current open positions.
+Fetches total account PNL by scraping user profile pages (the only reliable
+source that matches Polymarket's displayed values).
 
-The subgraph tracks all historical trades and calculates realized profit/loss
-from closed positions, which matches what Polymarket shows on user profiles.
+For market-specific unrealized PNL, uses the positions API to get cashPnl
+for the specific market position.
 
 NOTE: Time-windowed PNL (e.g., 30-day) is NOT available from this endpoint.
 The pnl_30d field in MarketHolder will remain None.
@@ -14,6 +13,7 @@ The pnl_30d field in MarketHolder will remain None.
 import aiohttp
 import asyncio
 import logging
+import re
 from typing import List, Dict, Any, Optional
 
 from ..models.leaderboard import LeaderboardEntry
@@ -24,9 +24,6 @@ from ..config.settings import (
 )
 
 logger = logging.getLogger(__name__)
-
-# PNL Subgraph endpoint - provides accurate realized PNL from all historical trades
-PNL_SUBGRAPH_URL = "https://api.goldsky.com/api/public/project_cl6mb8i9h0003e201j6li0diw/subgraphs/pnl-subgraph/0.0.14/gn"
 
 
 class LeaderboardFetcher:
@@ -47,54 +44,37 @@ class LeaderboardFetcher:
         if self.session:
             await self.session.close()
 
-    async def fetch_wallet_pnl_from_subgraph(
+    async def fetch_profile_pnl(
         self,
         wallet_address: str,
-    ) -> Optional[Dict[str, float]]:
+    ) -> Optional[float]:
         """
-        Fetch total realized PNL for a wallet from the PNL subgraph.
+        Fetch total account PNL by scraping the user's Polymarket profile page.
 
-        The subgraph tracks all historical trades and provides accurate
-        realized profit/loss that matches Polymarket profile pages.
+        This is the only reliable way to get the exact PNL value shown on
+        Polymarket profiles, which represents total lifetime realized profit/loss.
         """
         wallet_lower = wallet_address.lower()
 
-        query = """
-        query($user: String!) {
-            userPositions(where: {user: $user}, first: 1000) {
-                realizedPnl
-            }
-        }
-        """
-
         try:
-            async with self.session.post(
-                PNL_SUBGRAPH_URL,
-                json={"query": query, "variables": {"user": wallet_lower}},
-                headers={"Content-Type": "application/json"},
-            ) as response:
+            # Polymarket profile URL accepts wallet address
+            url = f"https://polymarket.com/profile/{wallet_lower}"
+            async with self.session.get(url) as response:
                 self._api_calls += 1
-                if response.status == 200:
-                    data = await response.json()
-                    positions = data.get("data", {}).get("userPositions", [])
-                    if not positions:
-                        return None
-
-                    # realizedPnl is in USDC micro-units (1e6)
-                    total_realized = sum(
-                        float(p.get("realizedPnl", 0) or 0) / 1e6
-                        for p in positions
-                    )
-
-                    return {
-                        "total_pnl": total_realized,
-                        "realized_pnl": total_realized,
-                        "position_count": len(positions),
-                    }
-                else:
+                if response.status != 200:
                     return None
+
+                html = await response.text()
+
+                # Extract PNL from embedded JSON data
+                # Pattern: "pnl":41186.29626801953
+                match = re.search(r'"pnl"\s*:\s*([0-9.-]+)', html)
+                if match:
+                    return float(match.group(1))
+
+                return None
         except Exception as e:
-            logger.debug(f"Error fetching PNL from subgraph for {wallet_address[:10]}: {e}")
+            logger.debug(f"Error fetching profile PNL for {wallet_address[:10]}: {e}")
             return None
 
     async def fetch_wallet_positions(
@@ -124,13 +104,12 @@ class LeaderboardFetcher:
         """
         Calculate total PNL for a wallet.
 
-        Uses the PNL subgraph for accurate realized PNL from all historical trades.
-        This matches what Polymarket shows on user profile pages.
+        Fetches profile page to get accurate lifetime realized PNL that matches
+        what Polymarket shows on user profile pages.
 
         Returns dict with:
-        - 'total_pnl': Total realized PNL from all closed trades
+        - 'total_pnl': Total realized PNL from profile
         - 'realized_pnl': Same as total_pnl
-        - 'position_count': Number of positions tracked
         """
         wallet_lower = wallet_address.lower()
 
@@ -138,39 +117,18 @@ class LeaderboardFetcher:
         if wallet_lower in self._pnl_cache:
             return self._pnl_cache[wallet_lower]
 
-        # Try subgraph first (most accurate)
-        result = await self.fetch_wallet_pnl_from_subgraph(wallet_address)
+        # Get profile PNL (matches Polymarket displayed values)
+        profile_pnl = await self.fetch_profile_pnl(wallet_address)
 
-        if result:
+        if profile_pnl is not None:
+            result = {
+                "total_pnl": profile_pnl,
+                "realized_pnl": profile_pnl,
+            }
             self._pnl_cache[wallet_lower] = result
             return result
 
-        # Fallback to positions API if subgraph fails
-        positions = await self.fetch_wallet_positions(wallet_address)
-
-        if not positions:
-            return None
-
-        total_cash_pnl = 0.0
-        total_realized_pnl = 0.0
-
-        for pos in positions:
-            cash_pnl = float(pos.get("cashPnl", 0) or 0)
-            realized_pnl = float(pos.get("realizedPnl", 0) or 0)
-            total_cash_pnl += cash_pnl
-            total_realized_pnl += realized_pnl
-
-        result = {
-            "total_pnl": total_realized_pnl if total_realized_pnl != 0 else total_cash_pnl,
-            "cash_pnl": total_cash_pnl,
-            "realized_pnl": total_realized_pnl,
-            "position_count": len(positions),
-        }
-
-        # Cache the result
-        self._pnl_cache[wallet_lower] = result
-
-        return result
+        return None
 
     async def build_leaderboard_cache(
         self,
@@ -210,10 +168,10 @@ class LeaderboardFetcher:
         self,
         holders: List[MarketHolder],
         condition_id: str = None,
-        batch_size: int = 5,
+        batch_size: int = 3,
     ) -> int:
         """
-        Enrich holder objects with PNL data from positions API.
+        Enrich holder objects with PNL data.
 
         Args:
             holders: List of MarketHolder objects to enrich
@@ -222,7 +180,7 @@ class LeaderboardFetcher:
 
         Sets on each holder:
             - overall_pnl: Unrealized PNL for THIS specific market position (cashPnl)
-            - realized_pnl: Total realized PNL across ALL positions (account total)
+            - realized_pnl: Total lifetime realized PNL (from profile page)
 
         Returns count of holders with PNL data found.
         """
@@ -232,46 +190,40 @@ class LeaderboardFetcher:
         for i in range(0, total, batch_size):
             batch = holders[i : i + batch_size]
 
-            # Fetch positions for batch in parallel
-            tasks = [self.fetch_wallet_positions(h.wallet_address) for h in batch]
-            results = await asyncio.gather(*tasks, return_exceptions=True)
+            # Fetch positions and profile PNL in parallel for each holder
+            position_tasks = [self.fetch_wallet_positions(h.wallet_address) for h in batch]
+            profile_tasks = [self.fetch_profile_pnl(h.wallet_address) for h in batch]
 
-            for holder, positions in zip(batch, results):
-                if isinstance(positions, Exception) or not positions:
-                    continue
+            position_results = await asyncio.gather(*position_tasks, return_exceptions=True)
+            profile_results = await asyncio.gather(*profile_tasks, return_exceptions=True)
 
-                # Find market-specific position for unrealized PNL
+            for holder, positions, profile_pnl in zip(batch, position_results, profile_results):
+                # Get market-specific unrealized PNL from positions
                 market_cash_pnl = None
-                if condition_id:
+                if not isinstance(positions, Exception) and positions and condition_id:
                     for pos in positions:
                         if pos.get("conditionId", "").lower() == condition_id.lower():
                             market_cash_pnl = float(pos.get("cashPnl", 0) or 0)
                             break
 
-                # Sum all positions' realized PNL for account total
-                total_realized = sum(
-                    float(pos.get("realizedPnl", 0) or 0) for pos in positions
-                )
+                # Get total account PNL from profile page
+                total_realized = None
+                if not isinstance(profile_pnl, Exception) and profile_pnl is not None:
+                    total_realized = profile_pnl
 
-                # Also sum cashPnl across all positions as fallback
-                total_cash = sum(
-                    float(pos.get("cashPnl", 0) or 0) for pos in positions
-                )
+                # If we have either piece of data, mark as found
+                if market_cash_pnl is not None or total_realized is not None:
+                    holder.overall_pnl = market_cash_pnl
+                    holder.realized_pnl = total_realized
+                    holder.is_on_leaderboard = True
+                    found_count += 1
 
-                # Set overall_pnl to market-specific cashPnl if available,
-                # otherwise use total cashPnl
-                holder.overall_pnl = market_cash_pnl if market_cash_pnl is not None else total_cash
-                holder.realized_pnl = total_realized
-                holder.is_on_leaderboard = True
-                found_count += 1
-
-                # Cache for future lookups
-                wallet_lower = holder.wallet_address.lower()
-                self._pnl_cache[wallet_lower] = {
-                    "total_pnl": holder.overall_pnl,
-                    "realized_pnl": total_realized,
-                    "position_count": len(positions),
-                }
+                    # Cache for future lookups
+                    wallet_lower = holder.wallet_address.lower()
+                    self._pnl_cache[wallet_lower] = {
+                        "total_pnl": market_cash_pnl,
+                        "realized_pnl": total_realized,
+                    }
 
             # Rate limiting between batches
             if i + batch_size < total:
