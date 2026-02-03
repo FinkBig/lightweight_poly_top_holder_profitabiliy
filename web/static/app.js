@@ -20,6 +20,7 @@
   const watchlistSidebar = document.getElementById("watchlist-sidebar");
   const watchlistToggle = document.getElementById("watchlist-toggle");
   const watchlistClose = document.getElementById("watchlist-close");
+  const watchlistMinimize = document.getElementById("watchlist-minimize");
   const watchlistItems = document.getElementById("watchlist-items");
   const watchlistCount = document.getElementById("watchlist-count");
 
@@ -166,14 +167,24 @@
       return;
     }
 
-    var html = '';
+    // Build table-based watchlist
+    var html = '<table class="watchlist-table">' +
+      '<thead><tr>' +
+        '<th>Signal</th>' +
+        '<th>Market</th>' +
+        '<th>Price</th>' +
+        '<th>Change</th>' +
+        '<th></th>' +
+      '</tr></thead><tbody>';
+
     keys.forEach(function(key) {
       var item = watchlist[key];
       var sr = item.scan_result;
       var market = item.market;
 
       // Calculate changes if we have history
-      var changes = '';
+      var priceChange = '';
+      var profChange = '';
       if (item.history && item.history.length > 0) {
         var prev = item.history[0];
         var yesPriceChange = sr.current_yes_price - prev.yes_price;
@@ -182,36 +193,34 @@
         if (Math.abs(yesPriceChange) > 0.001) {
           var priceChangeClass = yesPriceChange > 0 ? 'change-up' : 'change-down';
           var priceChangeSign = yesPriceChange > 0 ? '+' : '';
-          changes += '<span class="change-indicator ' + priceChangeClass + '">Price: ' + priceChangeSign + (yesPriceChange * 100).toFixed(1) + '%</span>';
+          priceChange = '<span class="change-pill ' + priceChangeClass + '">' + priceChangeSign + (yesPriceChange * 100).toFixed(1) + '%</span>';
         }
         if (Math.abs(yesProfChange) > 0.001) {
           var profChangeClass = yesProfChange > 0 ? 'change-up' : 'change-down';
           var profChangeSign = yesProfChange > 0 ? '+' : '';
-          changes += '<span class="change-indicator ' + profChangeClass + '">Prof%: ' + profChangeSign + (yesProfChange * 100).toFixed(1) + '%</span>';
+          profChange = '<span class="change-pill ' + profChangeClass + '" title="Profitable % change">' + profChangeSign + (yesProfChange * 100).toFixed(1) + '</span>';
         }
       }
 
       var verdictClass = sr.is_flagged ? (sr.flagged_side === 'YES' ? 'verdict-yes' : 'verdict-no') : 'verdict-neutral';
-      var verdictText = sr.is_flagged ? sr.flagged_side : 'NO SIGNAL';
+      var verdictText = sr.is_flagged ? sr.flagged_side : '—';
 
-      html += '<div class="watchlist-item" data-condition-id="' + key + '">' +
-        '<div class="watchlist-item-header">' +
-          '<span class="watchlist-verdict ' + verdictClass + '">' + verdictText + '</span>' +
-          '<button class="watchlist-remove" data-condition-id="' + key + '" title="Remove from watchlist">&times;</button>' +
-        '</div>' +
-        '<div class="watchlist-item-question">' + escapeHtml(sr.question) + '</div>' +
-        '<div class="watchlist-item-price">' +
-          '<span class="price-yes-sm">' + (sr.current_yes_price * 100).toFixed(0) + '% YES</span>' +
-          '<span class="price-no-sm">' + (sr.current_no_price * 100).toFixed(0) + '% NO</span>' +
-        '</div>' +
-        (changes ? '<div class="watchlist-changes">' + changes + '</div>' : '') +
-        '<div class="watchlist-item-footer">' +
-          '<span class="watchlist-time">Updated: ' + formatTimeAgo(item.lastRefresh || item.savedAt) + '</span>' +
-          '<button class="watchlist-refresh" data-condition-id="' + key + '" data-slug="' + escapeHtml(market.slug) + '">Refresh</button>' +
-        '</div>' +
-      '</div>';
+      // Truncate question for table
+      var shortQuestion = sr.question.length > 50 ? sr.question.substring(0, 47) + '...' : sr.question;
+
+      html += '<tr class="watchlist-row" data-condition-id="' + key + '">' +
+        '<td><span class="verdict-sm ' + verdictClass + '">' + verdictText + '</span></td>' +
+        '<td class="market-cell" title="' + escapeHtml(sr.question) + '">' + escapeHtml(shortQuestion) + '</td>' +
+        '<td class="price-cell"><span class="price-yes-sm">' + (sr.current_yes_price * 100).toFixed(0) + '¢</span></td>' +
+        '<td class="change-cell">' + (priceChange || profChange || '<span class="no-change">—</span>') + '</td>' +
+        '<td class="actions-cell">' +
+          '<button class="watchlist-refresh-sm" data-condition-id="' + key + '" data-slug="' + escapeHtml(market.slug) + '" title="Refresh">↻</button>' +
+          '<button class="watchlist-remove-sm" data-condition-id="' + key + '" title="Remove">×</button>' +
+        '</td>' +
+      '</tr>';
     });
 
+    html += '</tbody></table>';
     watchlistItems.innerHTML = html;
   }
 
@@ -232,36 +241,46 @@
   /* ── Watchlist Events ── */
 
   watchlistToggle.addEventListener("click", function() {
-    watchlistSidebar.classList.toggle("open");
+    watchlistSidebar.classList.add("open");
+    watchlistSidebar.classList.remove("minimized");
   });
 
   watchlistClose.addEventListener("click", function() {
     watchlistSidebar.classList.remove("open");
+    watchlistSidebar.classList.remove("minimized");
+  });
+
+  watchlistMinimize.addEventListener("click", function() {
+    var isMinimized = watchlistSidebar.classList.toggle("minimized");
+    watchlistMinimize.textContent = isMinimized ? "+" : "−";
+    watchlistMinimize.title = isMinimized ? "Expand" : "Minimize";
   });
 
   // Handle clicks within watchlist
   watchlistItems.addEventListener("click", function(e) {
     // Remove button
-    var removeBtn = e.target.closest(".watchlist-remove");
+    var removeBtn = e.target.closest(".watchlist-remove-sm");
     if (removeBtn) {
+      e.stopPropagation();
       var conditionId = removeBtn.getAttribute("data-condition-id");
       removeFromWatchlist(conditionId);
       return;
     }
 
     // Refresh button
-    var refreshBtn = e.target.closest(".watchlist-refresh");
+    var refreshBtn = e.target.closest(".watchlist-refresh-sm");
     if (refreshBtn) {
+      e.stopPropagation();
       var conditionId = refreshBtn.getAttribute("data-condition-id");
       var slug = refreshBtn.getAttribute("data-slug");
       refreshWatchlistItem(conditionId, slug, refreshBtn);
       return;
     }
 
-    // Click on item to analyze
-    var item = e.target.closest(".watchlist-item");
-    if (item && !e.target.closest("button")) {
-      var conditionId = item.getAttribute("data-condition-id");
+    // Click on row to analyze
+    var row = e.target.closest(".watchlist-row");
+    if (row && !e.target.closest("button")) {
+      var conditionId = row.getAttribute("data-condition-id");
       var watchlist = getWatchlist();
       var data = watchlist[conditionId];
       if (data && data.market && data.market.slug) {
@@ -275,6 +294,7 @@
   function refreshWatchlistItem(conditionId, slug, btn) {
     btn.disabled = true;
     btn.textContent = "...";
+    btn.classList.add("loading");
 
     var url = "https://polymarket.com/event/" + slug;
     var source = new EventSource("/api/analyze?url=" + encodeURIComponent(url));
@@ -284,19 +304,22 @@
       updateWatchlistWithNewData(conditionId, d);
       source.close();
       btn.disabled = false;
-      btn.textContent = "Refresh";
+      btn.textContent = "↻";
+      btn.classList.remove("loading");
     });
 
     source.addEventListener("error", function() {
       source.close();
       btn.disabled = false;
-      btn.textContent = "Refresh";
+      btn.textContent = "↻";
+      btn.classList.remove("loading");
     });
 
     source.addEventListener("complete", function() {
       source.close();
       btn.disabled = false;
-      btn.textContent = "Refresh";
+      btn.textContent = "↻";
+      btn.classList.remove("loading");
     });
   }
 
@@ -339,20 +362,18 @@
       verdictText = "NO SIGNAL";
     }
 
-    // Build header with bookmark button
+    // Build header with bookmark button in meta row
     var headerHTML =
       '<div class="card-header">' +
-        '<div class="card-title-row">' +
-          '<h2 class="card-question">' + escapeHtml(sr.question) + '</h2>' +
-          '<button class="' + bookmarkClass + '" title="' + bookmarkTitle + '" data-condition-id="' + market.condition_id + '">' +
-            '<svg width="18" height="18" viewBox="0 0 24 24" fill="' + (inWatchlist ? 'currentColor' : 'none') + '" stroke="currentColor" stroke-width="2">' +
-              '<path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>' +
-            '</svg>' +
-          '</button>' +
-        '</div>' +
+        '<h2 class="card-question">' + escapeHtml(sr.question) + '</h2>' +
         '<div class="card-meta">' +
           '<span class="verdict ' + verdictClass + '">' + verdictText + '</span>' +
           '<a class="pm-link" href="https://polymarket.com/event/' + encodeURIComponent(market.slug) + '" target="_blank" rel="noopener">View on Polymarket</a>' +
+          '<button class="' + bookmarkClass + '" title="' + bookmarkTitle + '" data-condition-id="' + market.condition_id + '">' +
+            '<svg width="16" height="16" viewBox="0 0 24 24" fill="' + (inWatchlist ? 'currentColor' : 'none') + '" stroke="currentColor" stroke-width="2">' +
+              '<path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>' +
+            '</svg>' +
+          '</button>' +
         '</div>' +
       '</div>';
 
