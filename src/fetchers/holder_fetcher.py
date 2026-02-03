@@ -123,7 +123,7 @@ class HolderFetcher:
                     wallet_address=wallet,
                     amount=amount,
                     side=side,
-                    username=h.get("pseudonym") or h.get("name"),
+                    username=h.get("name") or h.get("pseudonym"),
                     display_name=h.get("name"),
                 )
                 target_list.append(holder)
