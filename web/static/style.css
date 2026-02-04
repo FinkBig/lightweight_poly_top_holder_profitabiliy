@@ -480,6 +480,66 @@ h1 {
   letter-spacing: 0.5px;
 }
 
+/* ── Refresh Button ── */
+
+.refresh-btn {
+  background: #1a1c24;
+  border: 1px solid #3a3d48;
+  border-radius: 4px;
+  padding: 4px 10px;
+  cursor: pointer;
+  color: #888;
+  transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.refresh-btn:hover {
+  border-color: #00C076;
+  color: #00C076;
+  background: rgba(0, 192, 118, 0.1);
+}
+
+.refresh-btn.loading {
+  pointer-events: none;
+  opacity: 0.7;
+}
+
+.refresh-btn.loading svg {
+  animation: spin 1s linear infinite;
+}
+
+.refresh-text {
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* ── Card refresh state ── */
+
+.market-card.refreshing {
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.market-card.flash-update {
+  animation: flash 0.5s ease-out;
+}
+
+@keyframes flash {
+  0% { background: rgba(0, 192, 118, 0.2); }
+  100% { background: #1a1c24; }
+}
+
 /* ── Watchlist Toggle Button ── */
 
 .watchlist-toggle {

@@ -362,7 +362,7 @@
       verdictText = "NO SIGNAL";
     }
 
-    // Build header with bookmark button in meta row
+    // Build header with refresh and bookmark buttons in meta row
     var bookmarkText = inWatchlist ? 'Saved' : 'Save';
     var headerHTML =
       '<div class="card-header">' +
@@ -370,6 +370,12 @@
         '<div class="card-meta">' +
           '<span class="verdict ' + verdictClass + '">' + verdictText + '</span>' +
           '<a class="pm-link" href="https://polymarket.com/event/' + encodeURIComponent(market.slug) + '" target="_blank" rel="noopener">View on Polymarket</a>' +
+          '<button class="refresh-btn" title="Refresh data" data-slug="' + escapeHtml(market.slug) + '" data-condition-id="' + market.condition_id + '">' +
+            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+              '<path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>' +
+            '</svg>' +
+            '<span class="refresh-text">Refresh</span>' +
+          '</button>' +
           '<button class="' + bookmarkClass + '" title="' + bookmarkTitle + '" data-condition-id="' + market.condition_id + '">' +
             '<svg width="14" height="14" viewBox="0 0 24 24" fill="' + (inWatchlist ? 'currentColor' : 'none') + '" stroke="currentColor" stroke-width="2">' +
               '<path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>' +
@@ -535,7 +541,145 @@
       }
       return;
     }
+
+    // Refresh button
+    var refreshBtn = e.target.closest(".refresh-btn");
+    if (refreshBtn) {
+      var slug = refreshBtn.getAttribute("data-slug");
+      var conditionId = refreshBtn.getAttribute("data-condition-id");
+      var card = refreshBtn.closest(".market-card");
+      refreshMarketCard(slug, conditionId, card, refreshBtn);
+      return;
+    }
   });
+
+  /* ── Refresh single market ── */
+
+  function refreshMarketCard(slug, conditionId, card, btn) {
+    // Show loading state
+    btn.disabled = true;
+    btn.classList.add("loading");
+    var textSpan = btn.querySelector(".refresh-text");
+    if (textSpan) textSpan.textContent = "Loading...";
+    card.classList.add("refreshing");
+
+    var url = "https://polymarket.com/event/" + slug;
+    var source = new EventSource("/api/analyze?url=" + encodeURIComponent(url));
+
+    source.addEventListener("market_result", function(e) {
+      var d = JSON.parse(e.data);
+      // Find the result matching our condition_id (for multi-market events)
+      if (d.market.condition_id === conditionId) {
+        // Update the card in place
+        updateCardContent(card, d);
+        // Update watchlist if saved
+        if (isInWatchlist(conditionId)) {
+          updateWatchlistWithNewData(conditionId, d);
+        }
+      }
+    });
+
+    source.addEventListener("complete", function() {
+      source.close();
+      btn.disabled = false;
+      btn.classList.remove("loading");
+      if (textSpan) textSpan.textContent = "Refresh";
+      card.classList.remove("refreshing");
+    });
+
+    source.addEventListener("error", function() {
+      source.close();
+      btn.disabled = false;
+      btn.classList.remove("loading");
+      if (textSpan) textSpan.textContent = "Refresh";
+      card.classList.remove("refreshing");
+    });
+  }
+
+  function updateCardContent(card, data) {
+    var sr = data.scan_result;
+    var market = data.market;
+    var yesA = sr.yes_analysis;
+    var noA = sr.no_analysis;
+
+    // Update verdict
+    var verdictEl = card.querySelector(".verdict");
+    if (verdictEl) {
+      verdictEl.className = "verdict";
+      if (sr.is_flagged) {
+        verdictEl.classList.add(sr.flagged_side === "YES" ? "verdict-yes" : "verdict-no");
+        verdictEl.textContent = "FLAGGED " + sr.flagged_side + "  (score: " + sr.imbalance_score.toFixed(0) + ")";
+      } else {
+        verdictEl.classList.add("verdict-neutral");
+        verdictEl.textContent = "NO SIGNAL";
+      }
+    }
+
+    // Update price bar
+    var priceYes = card.querySelector(".price-yes");
+    var priceNo = card.querySelector(".price-no");
+    if (priceYes && priceNo) {
+      var yesPctWidth = (sr.current_yes_price * 100).toFixed(0);
+      var noPctWidth = (sr.current_no_price * 100).toFixed(0);
+      priceYes.style.width = yesPctWidth + "%";
+      priceYes.textContent = "$" + sr.current_yes_price.toFixed(2) + " YES";
+      priceNo.style.width = noPctWidth + "%";
+      priceNo.textContent = "$" + sr.current_no_price.toFixed(2) + " NO";
+    }
+
+    // Update profitability bar
+    var profYes = card.querySelector(".prof-yes");
+    var profNo = card.querySelector(".prof-no");
+    if (profYes && profNo) {
+      var yesProf = (yesA.profitable_pct * 100).toFixed(0);
+      var noProf = (noA.profitable_pct * 100).toFixed(0);
+      profYes.style.width = Math.max(yesProf, 5) + "%";
+      profYes.textContent = yesProf + "% YES";
+      profYes.className = "prof-yes" + (yesA.profitable_pct >= 0.6 ? " above-threshold" : "");
+      profNo.style.width = Math.max(noProf, 5) + "%";
+      profNo.textContent = noProf + "% NO";
+      profNo.className = "prof-no" + (noA.profitable_pct >= 0.6 ? " above-threshold" : "");
+    }
+
+    // Update side panels
+    var sidePanels = card.querySelector(".side-panels");
+    if (sidePanels) {
+      sidePanels.innerHTML = renderSidePanel(yesA, "yes") + renderSidePanel(noA, "no");
+    }
+
+    // Update data quality
+    var qualityEl = card.querySelector(".data-quality");
+    if (qualityEl) {
+      var avgQuality = ((yesA.data_quality_score + noA.data_quality_score) / 2).toFixed(0);
+      var qualityClass = avgQuality >= 70 ? "quality-good" : avgQuality >= 40 ? "quality-ok" : "quality-low";
+      qualityEl.className = "data-quality " + qualityClass;
+      qualityEl.textContent = "Data Quality: " + avgQuality + "/100";
+    }
+
+    // Update market stats
+    var statsEl = card.querySelector(".market-stats");
+    if (statsEl) {
+      statsEl.innerHTML = '<span>Vol: $' + fmt(market.volume) + '</span><span>Liq: $' + fmt(market.liquidity) + '</span>';
+    }
+
+    // Update holder tables
+    var holderSections = card.querySelectorAll(".holder-section");
+    holderSections.forEach(function(section) { section.remove(); });
+    var statsEl = card.querySelector(".market-stats");
+    if (statsEl) {
+      statsEl.insertAdjacentHTML("afterend",
+        renderHolderTable(data.yes_holders, "YES", data.index) +
+        renderHolderTable(data.no_holders, "NO", data.index)
+      );
+    }
+
+    // Update stored data
+    card._marketData = data;
+
+    // Flash effect to show update
+    card.classList.add("flash-update");
+    setTimeout(function() { card.classList.remove("flash-update"); }, 500);
+  }
 
   /* ── SSE connection ── */
 
