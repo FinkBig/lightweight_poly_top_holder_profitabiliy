@@ -192,8 +192,8 @@
 
         if (Math.abs(yesPriceChange) > 0.001) {
           var priceChangeClass = yesPriceChange > 0 ? 'change-up' : 'change-down';
-          var priceChangeSign = yesPriceChange > 0 ? '+' : '';
-          priceChange = '<span class="change-pill ' + priceChangeClass + '">' + priceChangeSign + yesPriceChange.toFixed(2) + 'c</span>';
+          var priceChangeSign = yesPriceChange > 0 ? '+$' : '-$';
+          priceChange = '<span class="change-pill ' + priceChangeClass + '">' + priceChangeSign + Math.abs(yesPriceChange).toFixed(2) + '</span>';
         }
         if (Math.abs(yesProfChange) > 0.001) {
           var profChangeClass = yesProfChange > 0 ? 'change-up' : 'change-down';
@@ -211,7 +211,7 @@
       html += '<tr class="watchlist-row" data-condition-id="' + key + '">' +
         '<td><span class="verdict-sm ' + verdictClass + '">' + verdictText + '</span></td>' +
         '<td class="market-cell" title="' + escapeHtml(sr.question) + '">' + escapeHtml(shortQuestion) + '</td>' +
-        '<td class="price-cell"><span class="price-yes-sm">' + sr.current_yes_price.toFixed(2) + 'c</span></td>' +
+        '<td class="price-cell"><span class="price-yes-sm">$' + sr.current_yes_price.toFixed(2) + '</span></td>' +
         '<td class="change-cell">' + (priceChange || profChange || '<span class="no-change">—</span>') + '</td>' +
         '<td class="actions-cell">' +
           '<button class="watchlist-refresh-sm" data-condition-id="' + key + '" data-slug="' + escapeHtml(market.slug) + '" title="Refresh">↻</button>' +
@@ -379,15 +379,15 @@
         '</div>' +
       '</div>';
 
-    // Price bar (display as cents, e.g., 0.75c)
-    var yesCents = sr.current_yes_price.toFixed(2);
-    var noCents = sr.current_no_price.toFixed(2);
+    // Price bar (display as dollars, e.g., $0.81)
+    var yesPrice = '$' + sr.current_yes_price.toFixed(2);
+    var noPrice = '$' + sr.current_no_price.toFixed(2);
     var yesPctWidth = (sr.current_yes_price * 100).toFixed(0);
     var noPctWidth = (sr.current_no_price * 100).toFixed(0);
     var priceBarHTML =
       '<div class="price-bar">' +
-        '<div class="price-yes" style="width:' + yesPctWidth + '%">' + yesCents + 'c YES</div>' +
-        '<div class="price-no" style="width:' + noPctWidth + '%">' + noCents + 'c NO</div>' +
+        '<div class="price-yes" style="width:' + yesPctWidth + '%">' + yesPrice + ' YES</div>' +
+        '<div class="price-no" style="width:' + noPctWidth + '%">' + noPrice + ' NO</div>' +
       '</div>';
 
     // Profitability comparison bar
